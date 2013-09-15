@@ -148,42 +148,71 @@
 
     var current_location = {
             path: '',
-            host: 80,
             search: {}
-        }, pre_url = '', docMode = document.documentMode,
+        }, pre_url , docMode = document.documentMode,
+        location = root.location, history = root.history,
+        hash_spliter = new RegExp('#' + Vt.__config['hashPrefix'] + '(.*)$'),
+        getHash = function () {
+            var match = this.location.href.match(hash_spliter);
+            return match ? match[1] : '';
+        },
         oldIE = /msie [\w.]+/.exec(navigator.userAgent.toLowerCase()) && (!docMode || docMode <= 7);
     Vt.fn.location = {
         url: function (url, replace) {
-            if (!url)return this;
+            if (!arguments.length)return location.href;
             if (replace) {
-                root.location.replace(url);
+                location.replace(url);
                 return this;
             }
-            root.location.href = url;
+            location.href = url;
             return this;
+        },
+        __getResultUrl: function () {
+            var url_search_list = _getTempArray();
+            forEach(current_location.search, function (value, key) {
+                url_search_list.push(key + '=' + value);
+            }, this);
+            return '#' + this.__config['hashPrefix'] + current_location.path + '?' + url_search_list.join('&');
         },
         path: function (path) {
             if (path) {
+                current_location.path = path;
+                this.url(this.__getResultUrl());
                 return this;
             }
             return '';
-
-        },
-        host: function () {
-
         },
         replace: function (path) {
             if (!path)return this;
+            current_location.path = path;
+            this.url(this.__getResultUrl(), true);
             return this;
         },
-        search: function () {
-
+        checkUrl: function () {
+            var now_url = location.href;
+            if (now_url === pre_url)return;
+            pre_url = now_url;
+            var hash_url = getHash();
+            //TODO 需要完成对url的解析
+            this.trigger('urlChange');
+        },
+        search: function (key, value) {
+            if (arguments.length === 1) {
+                return current_location.search[key] || null;
+            }
+            if (arguments.length === 2) {
+                return this;
+            }
+            return this;
         },
         listen: function () {
-            pre_url = location.href;
-
+            setTimeout(this.checkUrl, 0);
+            if (!oldIE && 'onhashchange' in window) {
+                $(window).on('hashchange', this.checkUrl);
+            } else {
+                setInterval(this.checkUrl, 50);
+            }
             return this;
-
         }
     };
 
