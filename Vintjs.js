@@ -12,9 +12,7 @@
         /**
          * 检测当前是否有全局变量 VintJS 存在。
          */
-            Vt = root['VintJS'] || function () {
-            this.init.apply(this, arguments);
-        } ,
+            Vt = root['VintJS'] || {} ,
 
         /**
          * @name VintJS.console
@@ -91,6 +89,17 @@
             return keys;
         },
 
+        extend = Vt.extend = function (obj) {
+            forEach(Array.prototype.slice.call(arguments, 1), function (source) {
+                if (source) {
+                    for (var prop in source) {
+                        obj[prop] = source[prop];
+                    }
+                }
+            });
+            return obj;
+        },
+
         __temp_array = [],
         /**
          * @private
@@ -108,13 +117,26 @@
             return __temp_array;
         };
 
-    Vt.fn = Vt.prototype;
+    var GLOBAL_CONFIG = {hashPrefix: ''};
 
-    Vt.fn.init = function () {
+    Vt.create = function () {
         this.location.listen();
-        this.__config = {
-            hashPrefix: ''
-        };
+        return this;
+    };
+
+    Vt.setTimeout = function (callback, time, context) {
+        context = context || root;
+        return setTimeout(function () {
+            callback.call(context)
+        }, time);
+    };
+
+
+    Vt.setInterval = function (callback, time, context) {
+        context = context || root;
+        return setInterval(function () {
+            callback.call(context)
+        }, time);
     };
 
     var event_spliter = /\s+/,
@@ -144,93 +166,100 @@
             return true;
         };
 
-    /**
-     * @name VintJS.prototype.on
-     * @function
-     * @param name 需绑定的时间名称，支持字符串以及对象、列表。
-     * @param callback 回调函数，当name为对象的时候该参数可为空。
-     * @param context 回调函数执行时的上下文。
-     * @description
-     * 绑定事件。
-     * @returns {object}
-     */
-    Vt.fn.on = function (name, callback, context) {
-        if (!eventAnalyze(this, 'on', name, [callback, context]) || !callback) return this;
-        this.__events || (this.__events = {});
-        var events = this.__events[name] || (this.__events[name] = []);
-        events.push({callback: callback, context: context, ctx: context || this});
-        return this;
-    };
 
-    /**
-     * @name VintJS.prototype.off
-     * @function
-     * @param name 需绑定的时间名称，支持字符串以及对象、列表、以及正则，可选。
-     * @param callback 回调函数，可选。
-     * @param context 回调函数执行时的上下文，可选。
-     * @description
-     * 取消绑定事件。只有在回调函数和上下文同时满足的时候，才能够取消绑定。
-     * 如果参数为空则删除所有绑定。如果只有name则删除该name下所有绑定事件。
-     * @returns {object}
-     */
-    Vt.fn.off = function (name, callback, context) {
-        if (!this.__events || !eventAnalyze(this, 'off', name, [callback, context])) return this;
-        if (arguments.length === 0) {
-            this.__events = {};
+    //事件相关方法
+    var Event = {
+        /**
+         * @name Event.on
+         * @function
+         * @param name 需绑定的时间名称，支持字符串以及对象、列表。
+         * @param callback 回调函数，当name为对象的时候该参数可为空。
+         * @param context 回调函数执行时的上下文。
+         * @description
+         * 绑定事件。
+         * @returns {object}
+         */
+        on: function (name, callback, context) {
+            if (!eventAnalyze(this, 'on', name, [callback, context]) || !callback) return this;
+            this.__events || (this.__events = {});
+            var events = this.__events[name] || (this.__events[name] = []);
+            events.push({callback: callback, context: context, ctx: context || this});
+            return this;
+        },
+
+        /**
+         * @name Event.off
+         * @function
+         * @param name 需绑定的时间名称，支持字符串以及对象、列表、以及正则，可选。
+         * @param callback 回调函数，可选。
+         * @param context 回调函数执行时的上下文，可选。
+         * @description
+         * 取消绑定事件。只有在回调函数和上下文同时满足的时候，才能够取消绑定。
+         * 如果参数为空则删除所有绑定。如果只有name则删除该name下所有绑定事件。
+         * @returns {object}
+         */
+        off: function (name, callback, context) {
+            if (!this.__events || !eventAnalyze(this, 'off', name, [callback, context])) return this;
+            if (arguments.length === 0) {
+                this.__events = {};
+                return this;
+            }
+            var names, events , retain;
+            if (isType(name, 'RegExp')) {
+                names = [];
+                forEach(getKeys(this.__events), function (ev_name) {
+                    if (name.test(ev_name)) {
+                        names.push(name);
+                    }
+                });
+            } else {
+                names = name ? [name] : getKeys(this.__events)
+            }
+            forEach(names, function (name) {
+                if (events = this.__events[name]) {
+                    this.__events[name] = retain = _getTempArray();
+                    if (callback || context) {
+                        forEach(events, function (event) {
+                            if ((callback && callback !== event.callback) || (context && context !== event.context)) {
+                                retain.push(event);
+                            }
+                        });
+                    }
+                    if (!retain.length) delete this.__events[name];
+                }
+            }, this);
+            return this;
+        },
+
+        /**
+         * @name Event.trigger
+         * @function
+         * @param name 触发的名称。
+         * @description
+         * 事件触发方法。name为必须值，后面可以追加参数，所追加的参数最终最为参数在回调函数中使用。
+         * @example
+         * var vt = new VintJS;
+         * vt.on('sleep',function(){console.log(arguments)});
+         * vt.trigger('sleep','arg1','arg2')
+         * 输出 => ['sleep','arg1','arg2']
+         * @returns {object}
+         */
+        trigger: function (name) {
+            if (!this.__events) return this;
+            var args = Array.prototype.slice.call(arguments, 1);
+            if (!eventAnalyze(this, 'trigger', name, args)) return this;
+            var events = this.__events[name];
+            forEach(events, function (ev) {
+                ev.callback.apply(ev.ctx, args);
+            }, this);
             return this;
         }
-        var names, events , retain;
-        if (isType(name, 'RegExp')) {
-            names = [];
-            forEach(getKeys(this.__events), function (ev_name) {
-                if (name.test(ev_name)) {
-                    names.push(name);
-                }
-            });
-        } else {
-            names = name ? [name] : getKeys(this.__events)
-        }
-        forEach(names, function (name) {
-            if (events = this.__events[name]) {
-                this.__events[name] = retain = _getTempArray();
-                if (callback || context) {
-                    forEach(events, function (event) {
-                        if ((callback && callback !== event.callback) || (context && context !== event.context)) {
-                            retain.push(event);
-                        }
-                    });
-                }
-                if (!retain.length) delete this.__events[name];
-            }
-        }, this);
-        return this;
     };
 
-    /**
-     * @name VintJS.prototype.trigger
-     * @function
-     * @param name 触发的名称。
-     * @description
-     * 事件触发方法。name为必须值，后面可以追加参数，所追加的参数最终最为参数在回调函数中使用。
-     * @example
-     * var vt = new VintJS;
-     * vt.on('sleep',function(){console.log(arguments)});
-     * vt.trigger('sleep','arg1','arg2')
-     * 输出 => ['sleep','arg1','arg2']
-     * @returns {object}
-     */
-    Vt.fn.trigger = function (name) {
-        if (!this.__events) return this;
-        var args = Array.prototype.slice.call(arguments, 1);
-        if (!eventAnalyze(this, 'trigger', name, args)) return this;
-        var events = this.__events[name];
-        forEach(events, function (ev) {
-            ev.callback.apply(ev.ctx, args);
-        }, this);
-        return this;
-    };
+    extend(Vt, Event);
 
-    var hash_spliter = new RegExp('#' + Vt.__config['hashPrefix'] + '(.*)$'),
+    //URL相关处理内容
+    var hash_spliter = new RegExp('#' + GLOBAL_CONFIG['hashPrefix'] + '(.*)$'),
         path_spliter = /^([^\?#]*)?(\?([^#]*))?$/,
         location = root.location,
         current_location = {
@@ -246,7 +275,7 @@
             }
         },
         getHash = function () {
-            var match = this.location.href.match(hash_spliter);
+            var match = location.href.match(hash_spliter);
             return match ? match[1] : '';
         },
         oldIE = /msie [\w.]+/.exec(navigator.userAgent.toLowerCase()) && (!docMode || docMode <= 7),
@@ -262,7 +291,7 @@
      * @description
      * 输出负责处理url相关的函数集，目前只支持锚链接格式，暂不支持pushState方法。
      */
-    Vt.fn.location = {
+    Vt.location = {
         url: function (url, replace) {
             if (!arguments.length)return location.href;
             if (url === pre_url)return this;
@@ -286,7 +315,7 @@
             forEach(current_location.search, function (value, key) {
                 url_search_list.push(encodeUriQuery(key, true) + (value === true ? '' : '=' + encodeUriQuery(value, true)));
             }, this);
-            return current_location.root + '#' + this.__config['hashPrefix'] + current_location.path + '?' + url_search_list.join('&');
+            return current_location.root + '#' + GLOBAL_CONFIG['hashPrefix'] + current_location.path + '?' + url_search_list.join('&');
         },
         path: function (path) {
             if (path) {
@@ -307,14 +336,18 @@
             if (now_url === pre_url)return this;
             pre_url = now_url;
             var match = path_spliter.exec(getHash());
-            if (match[1])current_location.path = tryDecodeURIComponent(match[1]);
-            if (match(3)) {
+
+            if (match[1] && current_location.path !== tryDecodeURIComponent(match[1])) {
+                current_location.path = tryDecodeURIComponent(match[1]);
+                this.trigger('urlChange.path')
+            }
+            if (match[3]) {
                 var key_value , key;
-                forEach(match(3).split('&'), function (keyValue) {
+                forEach(match[3].split('&'), function (keyValue) {
                     if (keyValue) {
                         key_value = keyValue.split('=');
                         if (key = tryDecodeURIComponent(key_value[0])) {
-                            current_location[key] = key_value[1] ? tryDecodeURIComponent(key_value[1]) : true;
+                            current_location.search[key] = key_value[1] ? tryDecodeURIComponent(key_value[1]) : true;
                         }
                     }
                 })
@@ -342,16 +375,21 @@
             return this;
         },
         listen: function () {
-            setTimeout(this.checkUrl, 0);
+            var parent = this;
+            Vt.setTimeout(this.checkUrl, 0, this);
             if (!oldIE && 'onhashchange' in window) {
-                $(window).on('hashchange', this.checkUrl);
+                $(window).on('hashchange', function(){
+                    parent.checkUrl();
+                });
             } else {
-                setInterval(this.checkUrl, 50);
+                Vt.setInterval(this.checkUrl, 50, this);
             }
             return this;
         }
     };
 
-    root['VintJS'] = Vt;
+    extend(Vt.location, Event);
+
+    window['VintJS'] = Vt;
 
 }).call(window, jQuery);
