@@ -74,7 +74,6 @@
 
         nativeKeys = Object.keys,
         /**
-         * @private
          * @name VintJS.getKeys
          * @description
          * 获取对象所有的属性名称。
@@ -97,7 +96,7 @@
          * @private
          * @name _getTempArray
          * @description
-         * 为节约内存，所有临时的数组都不会单独实例化Array对象，调用该方法生成临时的Array对象。
+         * 为节约内存，所有临时的数组都不会单独实例化Array对象，调用该方法生成临时的即用即销毁的Array对象。
          * var args = _getTempArray('VintJS', 'AngularJs');
          * args => ['VintJS', 'AngularJs']
          * @return {array}
@@ -242,10 +241,23 @@
             var match = this.location.href.match(hash_spliter);
             return match ? match[1] : '';
         },
-        oldIE = /msie [\w.]+/.exec(navigator.userAgent.toLowerCase()) && (!docMode || docMode <= 7);
+        oldIE = /msie [\w.]+/.exec(navigator.userAgent.toLowerCase()) && (!docMode || docMode <= 7),
+        encodeUriQuery = function (val, pctEncodeSpaces) {
+            return encodeURIComponent(val).
+                replace(/%40/gi, '@').
+                replace(/%3A/gi, ':').
+                replace(/%24/g, '$').
+                replace(/%2C/gi, ',').
+                replace(/%20/g, (pctEncodeSpaces ? '%20' : '+'));
+        };
+    /**
+     * @description
+     * 输出负责处理url相关的函数集，目前只支持锚链接格式，暂不支持pushState方法。
+     */
     Vt.fn.location = {
         url: function (url, replace) {
             if (!arguments.length)return location.href;
+            if (url === pre_url)return this;
             if (replace) {
                 location.replace(url);
                 return this;
@@ -253,40 +265,66 @@
             location.href = url;
             return this;
         },
+        /**
+         * @private
+         * @name __getResultUrl
+         * @function
+         * @returns {string}
+         * @description
+         * 根据current_location的内容返回当前的地址。
+         */
         __getResultUrl: function () {
             var url_search_list = _getTempArray();
             forEach(current_location.search, function (value, key) {
-                url_search_list.push(key + '=' + value);
+                url_search_list.push(encodeUriQuery(key, true) + (value === true ? '' : '=' + encodeUriQuery(value, true)));
             }, this);
             return '#' + this.__config['hashPrefix'] + current_location.path + '?' + url_search_list.join('&');
         },
         path: function (path) {
             if (path) {
-                current_location.path = path;
+                current_location.path = path.charAt(0) == '/' ? path : '/' + path;
                 this.url(this.__getResultUrl());
                 return this;
             }
-            return '';
+            return current_location.path;
         },
         replace: function (path) {
             if (!path)return this;
-            current_location.path = path;
+            current_location.path = path.charAt(0) == '/' ? path : '/' + path;
             this.url(this.__getResultUrl(), true);
             return this;
         },
         checkUrl: function () {
             var now_url = location.href;
-            if (now_url === pre_url)return;
+            if (now_url === pre_url)return this;
             pre_url = now_url;
             var hash_url = getHash();
+
             //TODO 需要完成对url的解析
             this.trigger('urlChange');
+            return this;
         },
         search: function (key, value) {
             if (arguments.length === 1) {
-                return current_location.search[key] || null;
+                if (isType(key, 'string')) {
+                    return current_location.search[key] || null;
+                }
+                if (isType(key, 'object')) {
+                    forEach(key, function (value, search) {
+                        current_location.search[search] = value;
+                    }, this);
+                    this.url(this.__getResultUrl());
+                }
+                return this;
             }
             if (arguments.length === 2) {
+                if (value === null) {
+                    delete current_location[key];
+                    this.url(this.__getResultUrl());
+                    return this;
+                }
+                current_location[key] = value;
+                this.url(this.__getResultUrl());
                 return this;
             }
             return this;
