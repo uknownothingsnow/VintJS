@@ -99,7 +99,6 @@
          * 为节约内存，所有临时的数组都不会单独实例化Array对象，调用该方法生成临时的即用即销毁的Array对象。
          * var args = _getTempArray('VintJS', 'AngularJs');
          * args => ['VintJS', 'AngularJs']
-         * @return {array}
          */
             _getTempArray = function () {
             __temp_array.length = 0;
@@ -231,12 +230,21 @@
         return this;
     };
 
-    var current_location = {
+    var hash_spliter = new RegExp('#' + Vt.__config['hashPrefix'] + '(.*)$'),
+        path_spliter = /^([^\?#]*)?(\?([^#]*))?$/,
+        location = root.location,
+        current_location = {
+            root: location.href.indexOf('#') === -1 ? location.href : location.href.substr(0, location.href.indexOf('#')),
             path: '',
             search: {}
         }, pre_url , docMode = document.documentMode,
-        location = root.location, history = root.history,
-        hash_spliter = new RegExp('#' + Vt.__config['hashPrefix'] + '(.*)$'),
+        tryDecodeURIComponent = function (value) {
+            try {
+                return decodeURIComponent(value);
+            } catch (e) {
+                return value;
+            }
+        },
         getHash = function () {
             var match = this.location.href.match(hash_spliter);
             return match ? match[1] : '';
@@ -278,7 +286,7 @@
             forEach(current_location.search, function (value, key) {
                 url_search_list.push(encodeUriQuery(key, true) + (value === true ? '' : '=' + encodeUriQuery(value, true)));
             }, this);
-            return '#' + this.__config['hashPrefix'] + current_location.path + '?' + url_search_list.join('&');
+            return current_location.root + '#' + this.__config['hashPrefix'] + current_location.path + '?' + url_search_list.join('&');
         },
         path: function (path) {
             if (path) {
@@ -298,35 +306,39 @@
             var now_url = location.href;
             if (now_url === pre_url)return this;
             pre_url = now_url;
-            var hash_url = getHash();
-
-            //TODO 需要完成对url的解析
+            var match = path_spliter.exec(getHash());
+            if (match[1])current_location.path = tryDecodeURIComponent(match[1]);
+            if (match(3)) {
+                var key_value , key;
+                forEach(match(3).split('&'), function (keyValue) {
+                    if (keyValue) {
+                        key_value = keyValue.split('=');
+                        if (key = tryDecodeURIComponent(key_value[0])) {
+                            current_location[key] = key_value[1] ? tryDecodeURIComponent(key_value[1]) : true;
+                        }
+                    }
+                })
+            }
             this.trigger('urlChange');
             return this;
         },
         search: function (key, value) {
             if (arguments.length === 1) {
                 if (isType(key, 'string')) {
-                    return current_location.search[key] || null;
+                    return current_location.search[key];
                 }
                 if (isType(key, 'object')) {
-                    forEach(key, function (value, search) {
-                        current_location.search[search] = value;
-                    }, this);
-                    this.url(this.__getResultUrl());
+                    current_location.search = key;
                 }
-                return this;
             }
             if (arguments.length === 2) {
                 if (value === null) {
                     delete current_location[key];
-                    this.url(this.__getResultUrl());
-                    return this;
+                } else {
+                    current_location[key] = value;
                 }
-                current_location[key] = value;
-                this.url(this.__getResultUrl());
-                return this;
             }
+            this.url(this.__getResultUrl());
             return this;
         },
         listen: function () {
