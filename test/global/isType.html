@@ -19,7 +19,7 @@
             });
         };
         equalTest('isType', isType, [
-            {args: ['', 'string'], excepted: false, type: 'String'},
+            {args: ['', 'string'], excepted: true, type: 'String'},
             {args: [1, 'string'], excepted: false, type: 'String'},
             {args: [1, 'number'], excepted: true, type: 'Number'},
             {args: [[],'array'], excepted: true, type: 'Array'},

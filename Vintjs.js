@@ -9,10 +9,21 @@
     'use strict';
 
     var root = this,
-        Vt = root['VintJS'] || function () {
+        /**
+         * 检测当前是否有全局变量 VintJS 存在。
+         */
+            Vt = root['VintJS'] || function () {
             this.init.apply(this, arguments);
         } ,
-        console = Vt.console = root.console || (function () {
+
+        /**
+         * @name VintJS.console
+         * @object
+         * @description
+         * 当浏览器版本较低不支持console的时候防止报错。具体使用同浏览器原生console。
+         * api 详情 https://developers.google.com/chrome-developer-tools/docs/console-api。
+         */
+            console = Vt.console = root.console || (function () {
             var cl = {} , attr_list = ['assert', 'clear', 'constructor', 'count', 'debug', 'dir', 'dirxml',
                 'error', 'group', 'groupCollapsed', 'groupEnd', 'info', 'log', 'markTimeline', 'profile',
                 'profileEnd', 'table', 'time', 'timeEnd', 'timeStamp', 'trace', 'warn'];
@@ -22,11 +33,25 @@
             return cl;
         })(),
 
-        isType = function (obj, type) {
+        /**
+         * @name VintJS.isType
+         * @function
+         * @description
+         * 判断对象 obj 是否为 type 类型。
+         * @return {boolean}
+         */
+            isType = Vt.isType = function (obj, type) {
             return Object.prototype.toString.call(obj).slice(8, -1).toLowerCase() === type.toLowerCase();
         },
 
-        has = function (obj, attr) {
+        /**
+         * @name VintJS.has
+         * @function
+         * @description
+         * 判断对象 obj 是否含有属性 attr。
+         * @return {boolean}
+         */
+            has = Vt.has = function (obj, attr) {
             return obj.hasOwnProperty(attr);
         },
 
@@ -48,7 +73,17 @@
         },
 
         nativeKeys = Object.keys,
-        getKeys = Vt.getKeys = nativeKeys || function (obj) {
+        /**
+         * @private
+         * @name VintJS.getKeys
+         * @description
+         * 获取对象所有的属性名称。
+         * @example
+         * console.log(VintJS.getKeys({'name':'VintJS','author':'Vincent Ting'}));
+         * 输出 => ['name','author']
+         * @return {array}
+         */
+            getKeys = Vt.getKeys = nativeKeys || function (obj) {
             if (obj !== Object(obj)) throw new TypeError('Invalid object');
             var keys = [];
             forEach(obj, function (value, key) {
@@ -58,7 +93,16 @@
         },
 
         __temp_array = [],
-        _getTempArray = function () {
+        /**
+         * @private
+         * @name _getTempArray
+         * @description
+         * 为节约内存，所有临时的数组都不会单独实例化Array对象，调用该方法生成临时的Array对象。
+         * var args = _getTempArray('VintJS', 'AngularJs');
+         * args => ['VintJS', 'AngularJs']
+         * @return {array}
+         */
+            _getTempArray = function () {
             __temp_array.length = 0;
             forEach(arguments, function (value, i) {
                 __temp_array[i] = value;
@@ -76,7 +120,15 @@
     };
 
     var event_spliter = /\s+/,
-        eventAnalyze = function (obj, action, name, rest) {
+        /**
+         * @private
+         * @name eventAnalyze
+         * @function
+         * @description
+         * 分析事件相关函数传入的参数。
+         * @return {boolean}
+         */
+            eventAnalyze = function (obj, action, name, rest) {
             if (!name) return true;
             if (isType(name, 'object')) {
                 forEach(name, function (value, key) {
@@ -94,6 +146,16 @@
             return true;
         };
 
+    /**
+     * @name VintJS.prototype.on
+     * @function
+     * @param name 需绑定的时间名称，支持字符串以及对象、列表。
+     * @param callback 回调函数，当name为对象的时候该参数可为空。
+     * @param context 回调函数执行时的上下文。
+     * @description
+     * 绑定事件。
+     * @returns {object}
+     */
     Vt.fn.on = function (name, callback, context) {
         if (!eventAnalyze(this, 'on', name, [callback, context]) || !callback) return this;
         this.__events || (this.__events = {});
@@ -102,6 +164,17 @@
         return this;
     };
 
+    /**
+     * @name VintJS.prototype.off
+     * @function
+     * @param name 需绑定的时间名称，支持字符串以及对象、列表、以及正则，可选。
+     * @param callback 回调函数，可选。
+     * @param context 回调函数执行时的上下文，可选。
+     * @description
+     * 取消绑定事件。只有在回调函数和上下文同时满足的时候，才能够取消绑定。
+     * 如果参数为空则删除所有绑定。如果只有name则删除该name下所有绑定事件。
+     * @returns {object}
+     */
     Vt.fn.off = function (name, callback, context) {
         if (!this.__events || !eventAnalyze(this, 'off', name, [callback, context])) return this;
         if (arguments.length === 0) {
@@ -135,6 +208,19 @@
         return this;
     };
 
+    /**
+     * @name VintJS.prototype.trigger
+     * @function
+     * @param name 触发的名称。
+     * @description
+     * 事件触发方法。name为必须值，后面可以追加参数，所追加的参数最终最为参数在回调函数中使用。
+     * @example
+     * var vt = new VintJS;
+     * vt.on('sleep',function(){console.log(arguments)});
+     * vt.trigger('sleep','arg1','arg2')
+     * 输出 => ['sleep','arg1','arg2']
+     * @returns {object}
+     */
     Vt.fn.trigger = function (name) {
         if (!this.__events) return this;
         var args = Array.prototype.slice.call(arguments, 1);
