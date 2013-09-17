@@ -378,7 +378,7 @@
             var parent = this;
             Vt.setTimeout(this.checkUrl, 0, this);
             if (!oldIE && 'onhashchange' in window) {
-                $(window).on('hashchange', function(){
+                $(window).on('hashchange', function () {
                     parent.checkUrl();
                 });
             } else {
@@ -389,6 +389,20 @@
     };
 
     extend(Vt.location, Event);
+
+    Vt.route = {
+
+        __router: {},
+
+        when: function (path, route) {
+
+        },
+
+        otherwise: function (params) {
+
+        }
+
+    };
 
     window['VintJS'] = Vt;
 
