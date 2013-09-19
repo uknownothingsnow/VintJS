@@ -117,11 +117,27 @@
             return __temp_array;
         };
 
-    var GLOBAL_CONFIG = {hashPrefix: ''};
+    var GLOBAL_CONFIG = {
+        hash_prefix: '',
+        getCurrentUser: function () {
+            //NOT support asynchronous request currently!!
+            return true;
+        },
+        template_url: '/static/template/',
+        login_url: '/login'
+    };
 
-    Vt.create = function () {
+    Vt.create = function (options) {
+        forEach(options, function (value, key) {
+            GLOBAL_CONFIG[key] = value;
+        });
         this.location.listen();
         return this;
+    };
+
+    //Call this function in development environment.
+    Vt.Debug = function () {
+        GLOBAL_CONFIG.debug = true;
     };
 
     Vt.setTimeout = function (callback, time, context) {
@@ -259,7 +275,7 @@
     extend(Vt, Event);
 
     //URL相关处理内容
-    var hash_spliter = new RegExp('#' + GLOBAL_CONFIG['hashPrefix'] + '(.*)$'),
+    var hash_spliter = new RegExp('#' + GLOBAL_CONFIG['hash_prefix'] + '(.*)$'),
         path_spliter = /^([^\?#]*)?(\?([^#]*))?$/,
         location = root.location,
         current_location = {
@@ -292,6 +308,12 @@
      * 输出负责处理url相关的函数集，目前只支持锚链接格式，暂不支持pushState方法。
      */
     Vt.location = {
+        /**
+         *
+         * @param url
+         * @param replace
+         * @returns {*}
+         */
         url: function (url, replace) {
             if (!arguments.length)return location.href;
             if (url === pre_url)return this;
@@ -315,7 +337,7 @@
             forEach(current_location.search, function (value, key) {
                 url_search_list.push(encodeUriQuery(key, true) + (value === true ? '' : '=' + encodeUriQuery(value, true)));
             }, this);
-            return current_location.root + '#' + GLOBAL_CONFIG['hashPrefix'] + current_location.path + '?' + url_search_list.join('&');
+            return current_location.root + '#' + GLOBAL_CONFIG['hash_prefix'] + current_location.path + (url_search_list.length ? ('?' + url_search_list.join('&')) : '');
         },
         path: function (path) {
             if (path) {
@@ -331,7 +353,7 @@
             this.url(this.__getResultUrl(), true);
             return this;
         },
-        checkUrl: function () {
+        __checkUrl: function () {
             var now_url = location.href;
             if (now_url === pre_url)return this;
             pre_url = now_url;
@@ -339,7 +361,7 @@
 
             if (match[1] && current_location.path !== tryDecodeURIComponent(match[1])) {
                 current_location.path = tryDecodeURIComponent(match[1]);
-                this.trigger('urlChange.path')
+                this.trigger('urlChange.path');
             }
             if (match[3]) {
                 var key_value , key;
@@ -366,9 +388,9 @@
             }
             if (arguments.length === 2) {
                 if (value === null) {
-                    delete current_location[key];
+                    delete current_location.search[key];
                 } else {
-                    current_location[key] = value;
+                    current_location.search[key] = value;
                 }
             }
             this.url(this.__getResultUrl());
@@ -376,13 +398,13 @@
         },
         listen: function () {
             var parent = this;
-            Vt.setTimeout(this.checkUrl, 0, this);
+            Vt.setTimeout(this.__checkUrl, 0, this);
             if (!oldIE && 'onhashchange' in window) {
                 $(window).on('hashchange', function () {
-                    parent.checkUrl();
+                    parent.__checkUrl();
                 });
             } else {
-                Vt.setInterval(this.checkUrl, 50, this);
+                Vt.setInterval(this.__checkUrl, 50, this);
             }
             return this;
         }
@@ -390,19 +412,77 @@
 
     extend(Vt.location, Event);
 
+    var TEMPLATE_CACHE = {},
+        __checkUrlRole = function (role, url) {
+            if (isType(role, 'regExp')) {
+                return role.test(url);
+            }
+            return true;
+        };
+
     Vt.route = {
 
-        __router: {},
+        __routers: [],
 
-        when: function (path, route) {
+        __otherwise: null,
 
+        __use: function (router_object, params) {
+            if (isType(router_object, 'function')) {
+                router_object.apply(this, params);
+                return this;
+            }
+            if (!isType(router_object, 'object'))return this;
+            if (router_object['login_required'] && !!GLOBAL_CONFIG.getCurrentUser()) {
+                Vt.location.search('redirect', Vt.location.path());
+                this.redirectTo(GLOBAL_CONFIG.login_url);
+                return this;
+            }
+            if (router_object['redirect_to']) {
+                this.redirectTo(router_object['redirect_to']);
+                return this;
+            }
+            this.render(router_object['template'], router_object['controller'], params);
+            return this;
         },
 
-        otherwise: function (params) {
+        render: function (template, controller, params) {
+            //TODO It's time to render html.
+            return this;
+        },
 
+        redirectTo: function (url, replace) {
+            Vt.location.url(url, replace);
+            return this;
+        },
+
+        when: function (role, router_object) {
+            this.__routers.push({role: role, router_object: router_object})
+        },
+
+        otherwise: function (router_object) {
+            this.__otherwise = router_object;
+        },
+
+        response: function () {
+            //TODO Need to pre_treat this.__routers when first run.
+            var path = Vt.location.path();
+
+            for (var i = 0; i < this.__routers.length; i++) {
+                var router = this.__routers[i],
+                    params = __checkUrlRole(router.role, path);
+                if (params) {
+                    this.__use(router.router_object, params);
+                    return this;
+                }
+            }
+            if (this.__otherwise)this.__use(this.__otherwise);
+
+            return this;
         }
 
     };
+
+    Vt.location.on('urlChange.path', Vt.route.response);
 
     window['VintJS'] = Vt;
 
