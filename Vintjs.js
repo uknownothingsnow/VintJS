@@ -103,19 +103,21 @@
         __temp_array = [],
         /**
          * @private
-         * @name _getTempArray
+         * @name __getTempArray
          * @description
          * 为节约内存，所有临时的数组都不会单独实例化Array对象，调用该方法生成临时的即用即销毁的Array对象。
-         * var args = _getTempArray('VintJS', 'AngularJs');
+         * var args = __getTempArray('VintJS', 'AngularJs');
          * args => ['VintJS', 'AngularJs']
          */
-            _getTempArray = function () {
+            __getTempArray = function () {
             __temp_array.length = 0;
             forEach(arguments, function (value, i) {
                 __temp_array[i] = value;
             }, this);
             return __temp_array;
-        };
+        },
+        hash_spliter;
+
 
     var GLOBAL_CONFIG = {
         hash_prefix: '',
@@ -127,18 +129,6 @@
         login_url: '/login'
     };
 
-    Vt.create = function (options) {
-        forEach(options, function (value, key) {
-            GLOBAL_CONFIG[key] = value;
-        });
-        this.location.listen();
-        return this;
-    };
-
-    //Call this function in development environment.
-    Vt.Debug = function () {
-        GLOBAL_CONFIG.debug = true;
-    };
 
     Vt.setTimeout = function (callback, time, context) {
         context = context || root;
@@ -155,6 +145,20 @@
         }, time);
     };
 
+    Vt.create = function (options) {
+        forEach(options, function (value, key) {
+            GLOBAL_CONFIG[key] = value;
+        });
+        hash_spliter = new RegExp('#' + GLOBAL_CONFIG['hash_prefix'] + '(.*)$');
+        this.location.listen();
+        return this;
+    };
+
+    //Call this function in development environment.
+    Vt.Debug = function () {
+        GLOBAL_CONFIG.debug = true;
+    };
+
     var event_spliter = /\s+/,
         /**
          * @private
@@ -168,14 +172,14 @@
             if (!name) return true;
             if (isType(name, 'object')) {
                 forEach(name, function (value, key) {
-                    obj[action].apply(obj, _getTempArray(key, value).concat(rest));
+                    obj[action].apply(obj, __getTempArray(key, value).concat(rest));
                 }, this);
                 return false;
             }
             if (event_spliter.test(name)) {
                 var names = name.split(event_spliter);
                 forEach(names, function (name) {
-                    obj[action].apply(obj, _getTempArray(name).concat(rest));
+                    obj[action].apply(obj, __getTempArray(name).concat(rest));
                 }, this);
                 return false;
             }
@@ -233,7 +237,7 @@
             }
             forEach(names, function (name) {
                 if (events = this.__events[name]) {
-                    this.__events[name] = retain = _getTempArray();
+                    this.__events[name] = retain = __getTempArray();
                     if (callback || context) {
                         forEach(events, function (event) {
                             if ((callback && callback !== event.callback) || (context && context !== event.context)) {
@@ -275,8 +279,7 @@
     extend(Vt, Event);
 
     //URL相关处理内容
-    var hash_spliter = new RegExp('#' + GLOBAL_CONFIG['hash_prefix'] + '(.*)$'),
-        path_spliter = /^([^\?#]*)?(\?([^#]*))?$/,
+    var path_spliter = /^([^\?#]*)?(\?([^#]*))?$/,
         location = root.location,
         current_location = {
             root: location.href.indexOf('#') === -1 ? location.href : location.href.substr(0, location.href.indexOf('#')),
@@ -333,7 +336,7 @@
          * 根据current_location的内容返回当前的地址。
          */
         __getResultUrl: function () {
-            var url_search_list = _getTempArray();
+            var url_search_list = __getTempArray();
             forEach(current_location.search, function (value, key) {
                 url_search_list.push(encodeUriQuery(key, true) + (value === true ? '' : '=' + encodeUriQuery(value, true)));
             }, this);
@@ -357,8 +360,12 @@
             var now_url = location.href;
             if (now_url === pre_url)return this;
             pre_url = now_url;
-            var match = path_spliter.exec(getHash());
-
+            var hash = getHash();
+            if (!hash) {
+                this.replace('/');
+                return this;
+            }
+            var match = path_spliter.exec(hash);
             if (match[1] && current_location.path !== tryDecodeURIComponent(match[1])) {
                 current_location.path = tryDecodeURIComponent(match[1]);
                 this.trigger('urlChange.path');
@@ -412,19 +419,27 @@
 
     extend(Vt.location, Event);
 
-    var TEMPLATE_CACHE = {},
-        __checkUrlRole = function (role, url) {
-            if (isType(role, 'regExp')) {
-                return role.test(url);
-            }
-            return true;
-        };
+    var TEMPLATE_CACHE = {};
 
     Vt.route = {
 
         __routers: [],
 
+        __route_init: false,
+
         __otherwise: null,
+
+        __pre_treat_role: function () {
+            var old_routers = __getTempArray.apply(this, this.__routers);
+            this.__routers.length = 0;
+            forEach(old_routers, function (old_router) {
+                if (!isType(old_router.role, 'regExp')) {
+                    old_router.role = new RegExp('^' + old_router.role.replace(/:number/g, '(\\d+)')
+                        .replace(/:string/g, '(\\w+)').replace(/:all/g, '(.+)') + '$')
+                }
+                this.__routers.push(old_router);
+            }, this);
+        },
 
         __use: function (router_object, params) {
             if (isType(router_object, 'function')) {
@@ -433,7 +448,7 @@
             }
             if (!isType(router_object, 'object'))return this;
             if (router_object['login_required'] && !!GLOBAL_CONFIG.getCurrentUser()) {
-                Vt.location.search('redirect', Vt.location.path());
+                if (Vt.location.path() != '/')Vt.location.search('redirect', Vt.location.path());
                 this.redirectTo(GLOBAL_CONFIG.login_url);
                 return this;
             }
@@ -446,31 +461,41 @@
         },
 
         render: function (template, controller, params) {
+            console.log(params);
             //TODO It's time to render html.
             return this;
         },
 
         redirectTo: function (url, replace) {
-            Vt.location.url(url, replace);
+            if (replace) {
+                Vt.location.replace(url);
+            } else {
+                Vt.location.path(url);
+            }
             return this;
         },
 
         when: function (role, router_object) {
             this.__routers.push({role: role, router_object: router_object})
+            return this;
         },
 
         otherwise: function (router_object) {
             this.__otherwise = router_object;
+            return this;
         },
 
         response: function () {
-            //TODO Need to pre_treat this.__routers when first run.
+            if (!this.__route_init) {
+                this.__pre_treat_role();
+                this.__route_init = true;
+            }
             var path = Vt.location.path();
-
             for (var i = 0; i < this.__routers.length; i++) {
                 var router = this.__routers[i],
-                    params = __checkUrlRole(router.role, path);
-                if (params) {
+                    params = router.role.exec(path);
+                if (params !== null) {
+                    params.shift();
                     this.__use(router.router_object, params);
                     return this;
                 }
@@ -482,7 +507,7 @@
 
     };
 
-    Vt.location.on('urlChange.path', Vt.route.response);
+    Vt.location.on('urlChange.path', Vt.route.response, Vt.route);
 
     window['VintJS'] = Vt;
 
