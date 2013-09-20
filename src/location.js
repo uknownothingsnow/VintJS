@@ -101,7 +101,6 @@ VintJS.location = {
         if (match[1] && this.__pre_url !== match[1]) {
             this.__current_location.path = this.__tryDecodeURIComponent(match[1]);
             this.__pre_url = match[1];
-            this.trigger('urlChange.path');
         }
         this.trigger('urlChange');
         return this;

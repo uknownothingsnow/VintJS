@@ -159,7 +159,11 @@
             __GLOBAL_CONFIG[key] = value;
         });
         __GLOBAL_CONFIG.hash_spliter = new RegExp('#' + VintJS.getConfig('hash_prefix') + '(.*)$');
-        this.location.listen();
+        VintJS.$init = $('#vint-init');
+        this.template.get('base', function (content) {
+            VintJS.$init.html(content);
+            this.location.listen();
+        }, this);
         return this;
     };
 
@@ -396,7 +400,6 @@ VintJS.location = {
         if (match[1] && this.__pre_url !== match[1]) {
             this.__current_location.path = this.__tryDecodeURIComponent(match[1]);
             this.__pre_url = match[1];
-            this.trigger('urlChange.path');
         }
         this.trigger('urlChange');
         return this;
@@ -525,4 +528,46 @@ VintJS.route = {
 
 };
 
-VintJS.location.on('urlChange.path', VintJS.route.response, VintJS.route);
+VintJS.location.on('urlChange', VintJS.route.response, VintJS.route);
+VintJS.template = {
+    __cache_sign: 'T_',
+    __cache: (function () {
+        if (!window.localStorage)return false;
+        var storage = window.localStorage;
+        //Clear old template cache.
+        for (var i = 0; i < storage.length; i++) {
+            var name = storage.key(i);
+            if (name.indexOf('T_') === 0) {
+                storage.removeItem(name);
+            }
+        }
+        return storage;
+    })() || {},
+
+    __set: function (name, content) {
+        this.__cache[name] = content;
+    },
+
+    __load: function (url, callback) {
+        var parent = this;
+        $.get(url, function (content) {
+            callback.call(parent, content);
+        });
+    },
+
+    get: function (name, callback, context) {
+        callback = callback || $.noop;
+        context = context || this;
+        var cache_name = this.__cache_sign + name;
+        if (this.__cache[cache_name] !== undefined) {
+            callback(this.__cache[cache_name]);
+            return this;
+        }
+        var parent = this;
+        this.__load(VintJS.getConfig('template_url') + name + '.html', function (content) {
+            parent.__set(cache_name, content);
+            callback.call(context, content);
+        });
+        return this
+    }
+};

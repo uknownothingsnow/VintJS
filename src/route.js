@@ -84,4 +84,4 @@ VintJS.route = {
 
 };
 
-VintJS.location.on('urlChange.path', VintJS.route.response, VintJS.route);
+VintJS.location.on('urlChange', VintJS.route.response, VintJS.route);

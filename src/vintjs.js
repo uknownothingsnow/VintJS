@@ -159,7 +159,11 @@
             __GLOBAL_CONFIG[key] = value;
         });
         __GLOBAL_CONFIG.hash_spliter = new RegExp('#' + VintJS.getConfig('hash_prefix') + '(.*)$');
-        this.location.listen();
+        VintJS.$init = $('#vint-init');
+        this.template.get('base', function (content) {
+            VintJS.$init.html(content);
+            this.location.listen();
+        }, this);
         return this;
     };
 
