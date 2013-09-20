@@ -89,6 +89,12 @@
             return keys;
         },
 
+        restObj = function (obj) {
+            for (var prop in obj) {
+                delete obj[prop];
+            }
+        },
+
         extend = Vt.extend = function (obj) {
             forEach(Array.prototype.slice.call(arguments, 1), function (source) {
                 if (source) {
@@ -159,16 +165,16 @@
         GLOBAL_CONFIG.debug = true;
     };
 
-    var event_spliter = /\s+/,
+    var __event_spliter = /\s+/,
         /**
          * @private
-         * @name eventAnalyze
+         * @name __eventAnalyze
          * @function
          * @description
          * 分析事件相关函数传入的参数。
          * @return {boolean}
          */
-            eventAnalyze = function (obj, action, name, rest) {
+            __eventAnalyze = function (obj, action, name, rest) {
             if (!name) return true;
             if (isType(name, 'object')) {
                 forEach(name, function (value, key) {
@@ -176,8 +182,8 @@
                 }, this);
                 return false;
             }
-            if (event_spliter.test(name)) {
-                var names = name.split(event_spliter);
+            if (__event_spliter.test(name)) {
+                var names = name.split(__event_spliter);
                 forEach(names, function (name) {
                     obj[action].apply(obj, __getTempArray(name).concat(rest));
                 }, this);
@@ -186,13 +192,12 @@
             return true;
         };
 
-
     //事件相关方法
     var Event = {
         /**
          * @name Event.on
          * @function
-         * @param name 需绑定的时间名称，支持字符串以及对象、列表。
+         * @param name 需绑定的时间名称，支持字符串以及对象。
          * @param callback 回调函数，当name为对象的时候该参数可为空。
          * @param context 回调函数执行时的上下文。
          * @description
@@ -200,7 +205,7 @@
          * @returns {object}
          */
         on: function (name, callback, context) {
-            if (!eventAnalyze(this, 'on', name, [callback, context]) || !callback) return this;
+            if (!__eventAnalyze(this, 'on', name, [callback, context]) || !callback) return this;
             this.__events || (this.__events = {});
             var events = this.__events[name] || (this.__events[name] = []);
             events.push({callback: callback, context: context, ctx: context || this});
@@ -210,7 +215,7 @@
         /**
          * @name Event.off
          * @function
-         * @param name 需绑定的时间名称，支持字符串以及对象、列表、以及正则，可选。
+         * @param name 需绑定的时间名称，支持字符串以及对象、正则，可选。
          * @param callback 回调函数，可选。
          * @param context 回调函数执行时的上下文，可选。
          * @description
@@ -219,7 +224,7 @@
          * @returns {object}
          */
         off: function (name, callback, context) {
-            if (!this.__events || !eventAnalyze(this, 'off', name, [callback, context])) return this;
+            if (!this.__events || !__eventAnalyze(this, 'off', name, [callback, context])) return this;
             if (arguments.length === 0) {
                 this.__events = {};
                 return this;
@@ -229,7 +234,7 @@
                 names = [];
                 forEach(getKeys(this.__events), function (ev_name) {
                     if (name.test(ev_name)) {
-                        names.push(name);
+                        names.push(ev_name);
                     }
                 });
             } else {
@@ -237,7 +242,7 @@
             }
             forEach(names, function (name) {
                 if (events = this.__events[name]) {
-                    this.__events[name] = retain = __getTempArray();
+                    this.__events[name] = retain = [];
                     if (callback || context) {
                         forEach(events, function (event) {
                             if ((callback && callback !== event.callback) || (context && context !== event.context)) {
@@ -245,7 +250,11 @@
                             }
                         });
                     }
-                    if (!retain.length) delete this.__events[name];
+                    if (!retain.length) {
+                        delete this.__events[name];
+                    } else {
+                        this.__events[name] = retain;
+                    }
                 }
             }, this);
             return this;
@@ -267,7 +276,7 @@
         trigger: function (name) {
             if (!this.__events) return this;
             var args = Array.prototype.slice.call(arguments, 1);
-            if (!eventAnalyze(this, 'trigger', name, args)) return this;
+            if (!__eventAnalyze(this, 'trigger', name, args)) return this;
             var events = this.__events[name];
             forEach(events, function (ev) {
                 ev.callback.apply(ev.ctx, args);
@@ -285,7 +294,7 @@
             root: location.href.indexOf('#') === -1 ? location.href : location.href.substr(0, location.href.indexOf('#')),
             path: '',
             search: {}
-        }, pre_url , docMode = document.documentMode,
+        }, pre_url , pre_path, docMode = document.documentMode,
         tryDecodeURIComponent = function (value) {
             try {
                 return decodeURIComponent(value);
@@ -366,10 +375,6 @@
                 return this;
             }
             var match = path_spliter.exec(hash);
-            if (match[1] && current_location.path !== tryDecodeURIComponent(match[1])) {
-                current_location.path = tryDecodeURIComponent(match[1]);
-                this.trigger('urlChange.path');
-            }
             if (match[3]) {
                 var key_value , key;
                 forEach(match[3].split('&'), function (keyValue) {
@@ -380,6 +385,13 @@
                         }
                     }
                 })
+            } else {
+                restObj(current_location.search);
+            }
+            if (match[1] && pre_path !== match[1]) {
+                current_location.path = tryDecodeURIComponent(match[1]);
+                pre_path = match[1];
+                this.trigger('urlChange.path');
             }
             this.trigger('urlChange');
             return this;
@@ -411,7 +423,7 @@
                     parent.__checkUrl();
                 });
             } else {
-                Vt.setInterval(this.__checkUrl, 50, this);
+                Vt.setInterval(parent.__checkUrl, 50, this);
             }
             return this;
         }
@@ -447,9 +459,9 @@
                 return this;
             }
             if (!isType(router_object, 'object'))return this;
-            if (router_object['login_required'] && !!GLOBAL_CONFIG.getCurrentUser()) {
+            if (router_object['login_required'] && !GLOBAL_CONFIG.getCurrentUser()) {
                 if (Vt.location.path() != '/')Vt.location.search('redirect', Vt.location.path());
-                this.redirectTo(GLOBAL_CONFIG.login_url);
+                this.redirectTo(GLOBAL_CONFIG.login_url, true);
                 return this;
             }
             if (router_object['redirect_to']) {

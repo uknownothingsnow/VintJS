@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hello Vint</title>
+    <script>
+        window.current_user = false;
+    </script>
+</head>
+<body>
+
+<script src="/example/add-on/jquery-1.10.2.min.js" type="text/javascript"></script>
+<script src="/Vintjs.js" type="text/javascript"></script>
+<script>
+    var app = VintJS.create({
+        hash_prefix: '!',
+        getCurrentUser: function () {
+            return window.current_user;
+        },
+        template_url: '/example/template/'
+    });
+
+    app.route
+            .when('/', function () {
+                $('body').html('Here is homepage');
+                app.setTimeout(function () {
+                    this.redirectTo('/index');
+                }, 2000, this);
+            })
+            .when('/index', {
+                login_required: true,
+                template: 'index',
+                controller: ''
+            })
+            .when('/login', function () {
+                $('body').html('When finish login, u will redirect to ' + app.location.search('redirect'));
+            })
+            .when('/hello/:string', function (name) {
+                $('body').html('Hello ' + name);
+            })
+            .otherwise({
+                redirect_to: '/404'
+            })
+
+</script>
+</body>
+</html>
